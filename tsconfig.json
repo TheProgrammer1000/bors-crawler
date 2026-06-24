@@ -1,0 +1,15 @@
+{
+	"extends": "@apify/tsconfig",
+	"compilerOptions": {
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"target": "ES2022",	
+		"rootDir": "./src",      // Tvingar TS att bara titta i src-mappen
+    	"outDir": "./dist",       // Lägger den färdiga Javascript-koden i en dist-mapp
+		"noUnusedLocals": false,
+		"lib": ["DOM"],
+		"allowSyntheticDefaultImports": true,
+    	"esModuleInterop": true,
+	},
+	"include": ["src/**/*"]     //
+}

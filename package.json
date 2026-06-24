@@ -1,0 +1,42 @@
+{
+    "name": "bors-crawler",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "description": "This is an example of a Crawlee project.",
+    "dependencies": {
+        "@crawlee/impit-client": "^3.0.0",
+        "@langchain/core": "^1.2.0",
+        "@langchain/google-genai": "^2.2.0",
+        "@langchain/langgraph": "^1.4.4",
+        "@langchain/ollama": "^1.3.0",
+        "adm-zip": "^0.5.17",
+        "crawlee": "^3.0.0",
+        "dotenv": "^17.4.2",
+        "mysql2": "^3.22.5",
+        "pdf-parse": "^2.4.5",
+        "playwright": "1.61.0",
+        "turndown": "^7.2.4",
+        "turndown-plugin-gfm": "^1.0.2",
+        "zod": "^4.4.3"
+    },
+    "devDependencies": {
+        "@apify/tsconfig": "^0.2.0",
+        "@types/adm-zip": "^0.5.8",
+        "@types/node": "^24.13.2",
+        "tsx": "^4.4.0",
+        "typescript": "~6.0.0"
+    },
+    "scripts": {
+        "start:prod": "node dist/main.js",
+        "start:dev": "tsx src/main.ts",
+        "start": "npx tsx src/testSearch.ts",
+        "test-ai": "npx tsx src/testAgent.ts",
+        "crawl": "npm start && tsx src/testSearch.ts",
+        "build": "tsc",
+        "test": "echo \"Error: oops, the actor has no tests yet, sad!\" && exit 1",
+        "postinstall": "npx crawlee install-playwright-browsers"
+    },
+    "author": "It's not you it's me",
+    "license": "ISC"
+}

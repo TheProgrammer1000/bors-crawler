@@ -1,0 +1,22 @@
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+// Skapa anslutningspoolen till MySQL
+const pool = mysql.createPool({
+    host: process.env.DB_HOST || "localhost",
+    user: process.env.DB_USER || "root",
+    password: process.env.DB_PASSWORD || "",
+    database: process.env.DB_NAME,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+});
+
+/**
+ * Funktion för att sätta in eller uppdatera data i din specifika tabell struktur.
+ */
+
+
+export default pool;

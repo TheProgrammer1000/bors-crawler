@@ -1,0 +1,13 @@
+# This file tells Git which files shouldn't be added to source control
+
+.idea
+dist
+node_modules
+storage
+.env
+downloads
+Dockerfile
+balans_rapport.md
+balans_rapport.md
+kassaflode_rapport.md
+year_rapport.md
