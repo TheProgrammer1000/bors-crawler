@@ -7,17 +7,19 @@ import { ChatGroq } from "@langchain/groq";
 import dotenv from "dotenv";
 import { saveFinancialData } from "./db/db.js";
 import { request } from "http";
-import TurndownService from "turndown"; // 🎯 NYTT: Importera Turndown
-import { gfm } from "turndown-plugin-gfm"; // 🎯 NYTT: Importera GFM-plugin för tabeller
+import TurndownService from "turndown";
+import { gfm } from "turndown-plugin-gfm";
 
-// 🎯 NYTT: Initiera TurndownService så att det går att använda i processSingleFile
+// 1. Initiera Turndown med grundinställningar
 const turndownService = new TurndownService({
-    headingStyle: 'atx',
-    hr: '---',
-    bulletListMarker: '*',
-    codeBlockStyle: 'fenced'
+    headingStyle: 'atx',       // Använder # för rubriker istället för understrykning
+    hr: '---',                 // Avgränsare
+    bulletListMarker: '*',     // Punktlistor med *
+    codeBlockStyle: 'fenced'   // Kodblock med ```
 });
-turndownService.use(gfm); // Aktivera GitHub Flavored Markdown för snygga tabeller (|---|)
+
+// 2. Aktivera GFM (GitHub Flavored Markdown) för att stödja tabeller (|---|)
+turndownService.use(gfm);
 
 dotenv.config();
 
@@ -67,6 +69,8 @@ async function processSingleFile(fileName: string, model: any) {
 
     console.log(`Läser fil: ${filePath}`);
 
+    const fileType = `.xhtml`
+
     // 2. Extrahera texten från ZIP (samma logik som du byggde innan)
     const zip = new AdmZip(filePath);
     const zipEntries = zip.getEntries();
@@ -84,8 +88,13 @@ async function processSingleFile(fileName: string, model: any) {
     wholeRapportText = wholeRapportText.replace(/data:image\/[^;]+;base64,[^\s"']+/g, "");
     wholeRapportText = wholeRapportText.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, "");
 
-    // 3. SÖKNINGEN – Här använder du verktygen vi pratade om
+
+    // 3. HÄR GÖR DU OM TILL MARKDOWN 
+  
+
+    // 4. Nu arbetar du med ren Markdown i din sökning!
     let cleanRapportText = wholeRapportText.toLowerCase();
+
     
     const keyword = "koncernens resultaträkning".toLowerCase(); // Kom ihåg små bokstäver!
 
@@ -97,8 +106,9 @@ async function processSingleFile(fileName: string, model: any) {
 
     if(yearRapportChunk) {
         console.log("We got a hit!");
-        fs.writeFileSync(path.join(process.cwd(), 'year_rapport.md'), yearRapportChunk);
-        console.log("💾 Sparade Markdown-texten till 'year_rapport.md'!");
+        
+        fs.writeFileSync(path.join(process.cwd(), `year_rapport${fileType}`), yearRapportChunk);
+        console.log(`💾 Sparade ${fileType}-texten till 'year_rapport${fileType}'!`);
     } else {
         console.log("We did not get a good enough one wont save!!!");
     }
@@ -113,8 +123,9 @@ async function processSingleFile(fileName: string, model: any) {
 
     if(balansRapportChunk) {
         console.log("We got a hit for Balansräkning!");
-        fs.writeFileSync(path.join(process.cwd(), 'balans_rapport.md'), balansRapportChunk);
-        console.log("💾 Sparade Markdown-texten till 'balans_rapport.md'!");
+        
+        fs.writeFileSync(path.join(process.cwd(), `balans_rapport${fileType}`), balansRapportChunk);
+        console.log(`Sparade ${fileType}-texten till 'balans_rapport${fileType}'!`);
     } else {
         console.log("We did not get a good enough hit for Balansräkning!");
     }
@@ -131,8 +142,9 @@ async function processSingleFile(fileName: string, model: any) {
 
     if(kassaflodeRapportChunk) {
         console.log("We got a hit for Kassaflödesanalys!");
-        fs.writeFileSync(path.join(process.cwd(), 'kassaflode_rapport.md'), kassaflodeRapportChunk);
-        console.log("💾 Sparade Markdown-texten till 'kassaflode_rapport.md'!");
+
+        fs.writeFileSync(path.join(process.cwd(), `kassaflode_rapport${fileType}`), kassaflodeRapportChunk);
+        console.log(`💾 Sparade ${fileType}}-texten till 'kassaflode_rapport${fileType}'!`);
     } else {
         console.log("We did not get a good enough hit for Kassaflödesanalys!");
     }
@@ -141,46 +153,45 @@ async function processSingleFile(fileName: string, model: any) {
     console.log(`fileYear[1]: ${fileYear[1]}`)
 
 
- 
-    // const prompt = `
-    // Du är en finansiell analytiker expert på IFRS och ESEF-rapportering. 
-    // Din uppgift är och att noggrant extrahera finansiell data från de tre bifogade rapportklippen: Resultaträkning, Balansräkning och Kassaflödesanalys.
+ const prompt = `
+    Du är en finansiell analytiker expert på IFRS och ESEF-rapportering. 
+    Din uppgift är att noggrant extrahera finansiell data från de tre bifogade rapportklippen: Resultaträkning, Balansräkning och Kassaflödesanalys.
 
-    // Extrahera data för ALLA tillgängliga räkenskapsår som du hittar i klippen (oftast finns både det aktuella huvudåret och föregående jämförelseår med i tabellerna).
+    Extrahera data för ALLA tillgängliga räkenskapsår som du hittar i klippen (oftast finns både det aktuella huvudåret och föregående jämförelseår med i tabellerna).
 
-    // ### RAPPORTKLIPP ATT ANALYSERA:
-    // Klipp 1 (Resultat): ${yearRapportChunk}
-    // Klipp 2 (Balans): ${balansRapportChunk}
-    // Klipp 3 (Kassaflöde): ${kassaflodeRapportChunk}
+    ### RAPPORTKLIPP ATT ANALYSERA:
+    Klipp 1 (Resultat): ${yearRapportChunk}
+    Klipp 2 (Balans): ${balansRapportChunk}
+    Klipp 3 (Kassaflöde): ${kassaflodeRapportChunk}
 
-    // ### STRÄNGA INSTRUKTIONER FÖR FORMATERING:
-    // 1. Svara ENBART med en strukturerad JSON-array. Ingen introduktion, ingen förklarande text, inga markdown-block förutom det rena JSON-formatet.
-    // 2. Alla finansiella värden SKA vara rena nummer (inte strängar). 
-    // 3. Ta bort alla tusentalsavgränsare och mellanslag i siffrorna (t.ex. "4 143" SKA bli 4143 eller 4143.00).
-    // 4. Behåll minustecken för negativa värden (t.ex. kostnader eller utflöden som redovisas med "-" eller inom parentes).
-    // 5. Om ett specifikt nyckeltal eller rad saknas helt i klippen för ett visst år, sätt värdet till null.
-    // 6. Identifiera enheten (t.ex. "msek" eller "tkr") i tabellhuvudet och sätt det i fältet "enhet".
+    ### STRÄNGA INSTRUKTIONER FÖR FORMATERING:
+    1. Svara ENBART med en strukturerad JSON-array. Skriv ingen introduktion, ingen förklarande text och använd INGA markdown-block eller taggar (använd INTE \`\`\`json). Texten SKA börja direkt med '[' och sluta med ']'.
+    2. Alla finansiella värden SKA vara rena nummer (inte strängar). 
+    3. Ta bort alla tusentalsavgränsare och mellanslag i siffrorna (t.ex. "4 143" SKA bli 4143).
+    4. Konvertera svenska decimaltecken från kommatecken till punkt (t.ex. "3,45" eller "3,450" SKA bli 3.45).
+    5. Behåll minustecken för negativa värden. Om ett tal redovisas inom parentes eller med ett minustecken (t.ex. "(31)" eller "-31"), konvertera det till ett negativt nummer (-31).
+    6. Koppla synonymer till rätt fält i JSON. Exempel: "Nettoomsättning" eller "Intäkter" mapar till "omsättning". "Rörelseresultat" eller "Rörelsevinst" mapar till "ebit".
+    7. Om ett specifikt nyckeltal eller en rad saknas helt i klippen för ett visst år, sätt värdet till null.
+    8. Identifiera enheten (t.ex. "msek" eller "tkr") i tabellhuvudet och sätt det i fältet "enhet".
 
-    // ### JSON-STRUKTUR (EXEMPEL):
-    // [
-    // {
-    //     "år": 2023,
-    //     "enhet": "msek",
-    //     "omsättning": 4143.00,
-    //     "ebit": 250.00,
-    //     "årets_resultat": 121.00,
-    //     "resultat_per_aktie": 3.45,
-    //     "summa_tillgångar": 2929.00,
-    //     "summa_eget_kapital": 1500.00,
-    //     "långfristiga_skulder": 440.00,
-    //     "kortfristiga_skulder": 985.00,
-    //     "kassaflöde_löpande_verksamhet": 277.00,
-    //     "investeringar_capex": -31.00
-    // }
-    // ]
-    // `;
-
-
+    ### JSON-STRUKTUR (EXEMPEL):
+    [
+    {
+        "år": 1234,
+        "enhet": "msek",
+        "omsättning": 1234.00,
+        "ebit": 123.00,
+        "årets_resultat": 123.00,
+        "resultat_per_aktie": 1.23,
+        "summa_tillgångar": 1234.00,
+        "summa_eget_kapital": 1234.00,
+        "långfristiga_skulder": 123.00,
+        "kortfristiga_skulder": 123.00,
+        "kassaflöde_löpande_verksamhet": 123.00,
+        "investeringar_capex": -123.00
+    }
+    ]
+    `;
         
     // // 3. Skicka till modellen
     // const response = await model.invoke(prompt);
