@@ -6,7 +6,7 @@ async function run() {
         // Argument 1: Input (Statet för grafen)
         {
             messages: [
-                new HumanMessage(`Extrahera data från de sparade rapporterna.`)
+                new HumanMessage(`Extrahera data från de sparade rapporterna. Svara ENBART med JSON-arrayen, absolut ingen fritext eller förklarande text.`)
             ],
         },
         // Argument 2: Options (Här samlar vi ALLA inställningar)
