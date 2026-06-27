@@ -3,80 +3,75 @@ import { z } from "zod";
 import fs from "fs";
 import path from "path";
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const fileType = `.xhtml`;
 
 // --- VERKTYG 1: RESULTATRÄKNING ---
 export const readResultatrakning = tool(
-    async ({ kommando }) => {
-        console.log(`🤖 Hämtar Resultaträkning (Kommando: ${kommando})...`);
+    async () => {
+        console.log(`🤖 Hämtar Resultaträkning...`);
+
         try {
-            const filePath = path.join(process.cwd(), 'year_rapport.md');
+            const filePath = path.join(process.cwd(), `year_rapport${fileType}`);
             if (!fs.existsSync(filePath)) {
-                console.error(`Hittade inte filen year_rapport.md`);
-                return "Hittade inte 'year_rapport.md' i projektets root.";
+                console.error(`Hittade inte filen year_rapport${fileType}`);
+                return `Hittade inte 'year_rapport${fileType}' i projektets root.`;
             }
             return fs.readFileSync(filePath, "utf8");
-        } catch (error) { // Fixat: Tog bort ": Error" som bröt syntaxen
+        } catch (error: any) { 
             return `Fel vid läsning av resultaträkning: ${error.message}`;
         }
     },
     {
-        name: "readResultatrakning",
-        description: "Steg 1: Använd ALLTID detta verktyg först. Hämtar den färdiga resultaträkningen.",
-        schema: z.object({
-            kommando: z.string().describe("Skriv 'Hämta resultat' här.")
-        }),
+        name: "readResultatrakning", // FIXAT: Matchar din import och agent-array exakt
+        description: `Hämta den färdiga resultaträkningen och läs ut finansiella siffror. Tar inga argument.`,
+        schema: z.object({}), // FIXAT: Tomt schema = inga påhittade argument från LLM
     }
 );
 
-// --- VERKTYG 2: BALANSRÄKNING (Med 15s fördröjning) ---
+// --- VERKTYG 2: BALANSRÄKNING ---
 export const readBalansrakning = tool(
-    async ({ kommando }) => {
-        console.log("⏳ Väntar i 15 sekunder innan vi hämtar Balansräkningen...");
-        await sleep(15000);
+    async () => {
+        const rapport = "balans_rapport";
+        console.log(`🤖 Hämtar Balansräkning...`);
         
-        console.log(`🤖 Hämtar Balansräkning (Kommando: ${kommando})...`);
         try {
-            const filePath = path.join(process.cwd(), "balans_rapport.md");
+            const filePath = path.join(process.cwd(), `${rapport}${fileType}`);
             if (!fs.existsSync(filePath)) {
-                return "Hittade inte 'balans_rapport.md' i projektets root.";
+                console.error(`Hittade inte filen ${rapport}${fileType}`);
+                return `Hittade inte '${rapport}${fileType}' i projektets root.`;
             }
             return fs.readFileSync(filePath, "utf8");
-        } catch (error) {
-            return `Fel vid läsning av balansräkning: ${error.message}`;
+        } catch (error: any) { 
+            return `Fel vid läsning av ${rapport}${fileType}: ${error.message}`;
         }
     },
     {
-        name: "readBalansrakning",
-        description: "Steg 2: Använd detta verktyg efter resultaträkningen. Hämtar den färdiga balansräkningen.",
-        schema: z.object({
-            kommando: z.string().describe("Skriv 'Hämta balans' här.")
-        }),
+        name: "readBalansrakning", // FIXAT: Matchar din import
+        description: "Hämta den färdiga Balansräkningen och läs ut finansiella siffror. Tar inga argument.",
+        schema: z.object({}), // FIXAT: Tomt schema
     }
 );
 
-// --- VERKTYG 3: KASSAFLÖDE (Med 15s fördröjning) ---
-export const readKassaflode = tool(
-    async ({ kommando }) => {
-        console.log("⏳ Väntar i 15 sekunder innan vi hämtar Kassaflödet...");
-        await sleep(15000);
+// --- VERKTYG 3: KASSAFLÖDE ---
+export const readKassarakning = tool(
+    async () => {
+        const rapport = "kassaflode_rapport";
+        console.log(`🤖 Hämtar Kassaflödesanalys...`);
         
-        console.log(`🤖 Hämtar Kassaflödesanalys (Kommando: ${kommando})...`);
         try {
-            const filePath = path.join(process.cwd(), "kassaflode_rapport.md");
+            const filePath = path.join(process.cwd(), `${rapport}${fileType}`);
             if (!fs.existsSync(filePath)) {
-                return "Hittade inte 'kassaflode_rapport.md' i projektets root.";
+                console.error(`Hittade inte filen ${rapport}${fileType}`);
+                return `Hittade inte '${rapport}${fileType}' i projektets root.`;
             }
             return fs.readFileSync(filePath, "utf8");
-        } catch (error) {
-            return `Fel vid läsning av kassaflödesanalys: ${error.message}`;
+        } catch (error: any) { 
+            return `Fel vid läsning av ${rapport}${fileType}: ${error.message}`;
         }
     },
     {
-        name: "readKassaflode",
-        description: "Steg 3: Använd detta verktyg sist. Hämtar den färdiga kassaflödesanalysen.",
-        schema: z.object({
-            kommando: z.string().describe("Skriv 'Hämta kassaflöde' här.")
-        }),
+        name: 'readKassarakning', // FIXAT: Matchar din import
+        description: "Hämta den färdiga Kassaflödesanalysen och läs ut finansiella siffror. Tar inga argument.",
+        schema: z.object({}), // FIXAT: Tomt schema
     }
 );

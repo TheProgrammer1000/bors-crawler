@@ -31,14 +31,9 @@
         "typescript": "~6.0.0"
     },
     "scripts": {
-        "start:prod": "node dist/main.js",
-        "start:dev": "tsx src/main.ts",
-        "start": "npx tsx src/testSearch.ts",
-        "test-ai": "npx tsx src/testAgent.ts",
-        "crawl": "npm start && tsx src/testSearch.ts",
-        "build": "tsc",
-        "test": "echo \"Error: oops, the actor has no tests yet, sad!\" && exit 1",
-        "postinstall": "npx crawlee install-playwright-browsers"
+        "test-ai": "npx tsx src/testSearch.ts",
+        "crawl": "npx tsx src/crawler/main.ts",
+        "pipeline": "npm run crawl && npm run test-ai"
     },
     "author": "It's not you it's me",
     "license": "ISC"

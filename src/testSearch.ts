@@ -1,14 +1,18 @@
 import fs from "fs";
 import path from "path";
 import AdmZip from "adm-zip";
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { ChatOllama } from "@langchain/ollama"; // 1. Ändrat till ChatOllama
-import { ChatGroq } from "@langchain/groq";
 import dotenv from "dotenv";
 import { saveFinancialData } from "./db/db.js";
 import { request } from "http";
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
+import { runAgent } from "./ai/testAgent.js";
+
+import { FinansData } from "./types.js";
+
+// Hjälpfunktion för att pausa exekveringen (Rate Limiting)
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 
 // 1. Initiera Turndown med grundinställningar
 const turndownService = new TurndownService({
@@ -34,7 +38,7 @@ function extractChunk(cleanRapportText: string, keyword: string, keyTags:string[
        // Vi backar 1000 tecken för att få med "Nettoomsättning" som ligger precis ovanför
         // Och tar 5000 tecken totalt för att få med hela rapporten ned till resultat per aktie
         const startClip = Math.max(0, pos - 1000); // Backa lite mer (500 tecken) så vi inte missar tabellhuvudet
-        const candidateChunk = cleanRapportText.substring(startClip, startClip + 12000); // Ta 5000 tecken framåt
+        const candidateChunk = cleanRapportText.substring(startClip, startClip + 30000); // Ta 5000 tecken framåt
         const candidateLower = candidateChunk.toLowerCase();
 
         let score = 0;
@@ -54,16 +58,54 @@ function extractChunk(cleanRapportText: string, keyword: string, keyTags:string[
         pos = cleanRapportText.indexOf(keyword, (pos + 1));
     }
 
-    if(rapportChunk) {
+   if (rapportChunk) {
         console.log("We got the bestChunk!!");
-        // fs.writeFileSync(path.join(process.cwd(), `${keyword}.md`), rapportChunk);
         return rapportChunk;
-        
     }
     return "";
 }
+function extractFinansNumber(yearRapportChunk: string) {
+    let cleanChunk = yearRapportChunk.toLowerCase();
+    let keywordOmsattning = "ifrs-full:revenue".toLowerCase(); 
+    let keywordRorelseResultat = `ifrs-full:ProfitLossFromOperatingActivities`.toLowerCase();
+    let keywordArResultat = `ifrs-full:comprehensiveincome`.toLowerCase();
+    let keywordAktiePerResult = `ifrs-full:BasicEarningsLossPerShare`.toLowerCase();
 
-async function processSingleFile(fileName: string, model: any) {
+    let keywordsYearRapport = [keywordOmsattning, keywordRorelseResultat, keywordArResultat, keywordAktiePerResult, 'basicearningslosspershare'.toLowerCase(), 'basicearningspershare'.toLowerCase()];
+    let arrayPos = [];
+
+
+    for (let i = 0; i < keywordsYearRapport.length; i++) {
+        
+        let pos = cleanChunk.indexOf(keywordsYearRapport[i]);
+        
+
+        while(pos !== -1) {
+            
+            // 1. Logga den AKTUELLA träffen först
+            console.log(`Träff \nKeyword: ${keywordsYearRapport[i]}\nhittades vid position: ${pos}`);
+            
+            arrayPos.push(pos);
+            
+            // 2. Sök sedan efter nästa (vilket kan bli -1 och stänga loopen inför nästa varv)
+            pos = cleanChunk.indexOf(keywordsYearRapport[i], pos + 1);
+        }
+    }
+
+    arrayPos.sort((a, b) => a - b);
+
+    return arrayPos;
+}
+
+function chopMore(posBegin: number, posEnd: number, yearRapportChunk: string) {
+    const candidateChunk = yearRapportChunk.substring(posBegin - 300, posEnd + 500); // Ta 5000 tecken framåt
+    const candidateLower = candidateChunk.toLowerCase();
+
+    return candidateLower;
+}
+
+
+async function processSingleFile(fileName: string) {
     // 1. Sätt upp filen du vill testa med (ändra till en pdf eller zip du har i mappen)
     const filePath = path.join(process.cwd(), 'downloads', fileName);
 
@@ -106,8 +148,15 @@ async function processSingleFile(fileName: string, model: any) {
 
     if(yearRapportChunk) {
         console.log("We got a hit!");
-        
+        fs.writeFileSync(path.join(process.cwd(), `year_rapport_test${fileType}`), yearRapportChunk);
+        let posArray = extractFinansNumber(yearRapportChunk);
+
+        console.log(`posArray: ${posArray}`)
+        yearRapportChunk = chopMore(posArray[0], posArray[posArray.length - 1], yearRapportChunk);
+
         fs.writeFileSync(path.join(process.cwd(), `year_rapport${fileType}`), yearRapportChunk);
+
+
         console.log(`💾 Sparade ${fileType}-texten till 'year_rapport${fileType}'!`);
     } else {
         console.log("We did not get a good enough one wont save!!!");
@@ -149,145 +198,99 @@ async function processSingleFile(fileName: string, model: any) {
         console.log("We did not get a good enough hit for Kassaflödesanalys!");
     }
 
-    const fileYear = fileName.split('_');
-    console.log(`fileYear[1]: ${fileYear[1]}`)
+    const fileInfo = fileName.split('_');
+
+    const companyName = fileInfo[0];
+    const rapportYear = Number(fileInfo[1]);
+    // Fix: Ersätt .zip med tom sträng ifall filändelsen hänger med
+    const isin = fileInfo[2].replace(".zip", "").trim();
 
 
- const prompt = `
-    Du är en finansiell analytiker expert på IFRS och ESEF-rapportering. 
-    Din uppgift är att noggrant extrahera finansiell data från de tre bifogade rapportklippen: Resultaträkning, Balansräkning och Kassaflödesanalys.
+    try {
+        console.log("Startar agenten...");
+        let jsonText: string = await runAgent(); 
 
-    Extrahera data för ALLA tillgängliga räkenskapsår som du hittar i klippen (oftast finns både det aktuella huvudåret och föregående jämförelseår med i tabellerna).
+        // 1. Klipp ut ALLT som ligger mellan [ och ]
+        const jsonMatch = jsonText.match(/\[([\s\S]*?)\]/);
+        if (jsonMatch) {
+            jsonText = jsonMatch[0]; 
+        } else {
+            jsonText = "[]"; 
+        }
 
-    ### RAPPORTKLIPP ATT ANALYSERA:
-    Klipp 1 (Resultat): ${yearRapportChunk}
-    Klipp 2 (Balans): ${balansRapportChunk}
-    Klipp 3 (Kassaflöde): ${kassaflodeRapportChunk}
+        // 2. Extra städnings-regex för markdown-block
+        jsonText = jsonText.replace(/```json/gi, "").replace(/```/gi, "").trim();
 
-    ### STRÄNGA INSTRUKTIONER FÖR FORMATERING:
-    1. Svara ENBART med en strukturerad JSON-array. Skriv ingen introduktion, ingen förklarande text och använd INGA markdown-block eller taggar (använd INTE \`\`\`json). Texten SKA börja direkt med '[' och sluta med ']'.
-    2. Alla finansiella värden SKA vara rena nummer (inte strängar). 
-    3. Ta bort alla tusentalsavgränsare och mellanslag i siffrorna (t.ex. "4 143" SKA bli 4143).
-    4. Konvertera svenska decimaltecken från kommatecken till punkt (t.ex. "3,45" eller "3,450" SKA bli 3.45).
-    5. Behåll minustecken för negativa värden. Om ett tal redovisas inom parentes eller med ett minustecken (t.ex. "(31)" eller "-31"), konvertera det till ett negativt nummer (-31).
-    6. Koppla synonymer till rätt fält i JSON. Exempel: "Nettoomsättning" eller "Intäkter" mapar till "omsättning". "Rörelseresultat" eller "Rörelsevinst" mapar till "ebit".
-    7. Om ett specifikt nyckeltal eller en rad saknas helt i klippen för ett visst år, sätt värdet till null.
-    8. Identifiera enheten (t.ex. "msek" eller "tkr") i tabellhuvudet och sätt det i fältet "enhet".
+        // 3. FIXAT: Ta bort hängande kommatecken (trailing commas) innan måsvingar och klamrar!
+        jsonText = jsonText.replace(/,\s*([\]}])/g, '$1');
 
-    ### JSON-STRUKTUR (EXEMPEL):
-    [
-    {
-        "år": 1234,
-        "enhet": "msek",
-        "omsättning": 1234.00,
-        "ebit": 123.00,
-        "årets_resultat": 123.00,
-        "resultat_per_aktie": 1.23,
-        "summa_tillgångar": 1234.00,
-        "summa_eget_kapital": 1234.00,
-        "långfristiga_skulder": 123.00,
-        "kortfristiga_skulder": 123.00,
-        "kassaflöde_löpande_verksamhet": 123.00,
-        "investeringar_capex": -123.00
+        // Nu kan vi parsa utan att det kraschar!
+        const parsedData: any = JSON.parse(jsonText);
+        const dataArray: any[] = Array.isArray(parsedData) ? parsedData : [parsedData];
+
+        // Loopa igenom och spara varje räkenskapsår
+        for (const rawData of dataArray) {
+            
+            // Här skapar vi det strikta objektet som följer ditt FinansData-interface
+            const snyggFinansData: FinansData = {
+                company_namn: companyName,
+                isin: isin,
+                ar: rawData.ar !== undefined ? Number(rawData.ar) : (rawData.år !== undefined ? Number(rawData.år) : rapportYear),
+                enhet: rawData.enhet,
+
+                // --- Resultaträkning ---
+                omsattning: rawData.omsattning !== undefined ? rawData.omsattning : rawData.omsättning,
+                rorelseresultat: rawData.rorelseresultat !== undefined ? rawData.rorelseresultat : rawData.ebit, // Mappar även mot ebit från prompten
+                resultat_fore_skatt: rawData.resultat_fore_skatt,
+                arets_resultat: rawData.arets_resultat !== undefined ? rawData.arets_resultat : rawData.årets_resultat,
+                resultat_per_aktie: rawData.resultat_per_aktie,
+
+                // --- Balansräkning ---
+                summa_tillgangar: rawData.summa_tillgangar !== undefined ? rawData.summa_tillgangar : rawData.summa_tillgångar,
+                summa_eget_kapital: rawData.summa_eget_kapital,
+                langfristiga_skulder: rawData.langfristiga_skulder,
+                kortfristiga_skulder: rawData.kortfristiga_skulder,
+
+                // --- Kassaflödesanalys ---
+                forandring_rorelsekapital: rawData.forandring_rorelsekapital,
+                kassaflode_lopande_verksamhet: rawData.kassaflode_lopande_verksamhet !== undefined ? rawData.kassaflode_lopande_verksamhet : rawData.kassaflöde_löpande_verksamhet,
+                investeringar_capex: rawData.investeringar_capex,
+                totalt_kassaflode: rawData.totalt_kassaflode !== undefined ? rawData.totalt_kassaflode : rawData.totalt_kassaflöde
+            };
+
+            // Skicka det typade objektet till din DB-funktion
+            await saveFinancialData(snyggFinansData);
+        }
+
+        console.log("✅ All finansiell data har mappats till FinansData-interfacet och sparats i databasen.");
+
+    } catch (error) {
+        console.error(`error: ${error.message}`)
     }
-    ]
-    `;
-        
-    // // 3. Skicka till modellen
-    // const response = await model.invoke(prompt);
-
-    // const aiContent = response.content as string;
-    // console.log(`\n🤖 Svar från modell:`);
-    // console.log(aiContent);
-
-    // // 4. LAGRA RESULTATET I DATABASEN
-    // try {
-    //     // Städa bort eventuella markdown-tagg-block om de kom med
-    //     const cleanJsonString = aiContent
-    //         .replace(/```json/g, "")
-    //         .replace(/```/g, "")
-    //         .trim();
-
-    //     // Validera JSON-strukturen
-    //     const jsonData = JSON.parse(cleanJsonString);
-        
-    //     // Extrahera information dynamiskt från filnamnet (t.ex. "HANZA_2023_SE0007130083.zip")
-    //     const fileParts = fileName.replace(".zip", "").replace(".pdf", "").split("_");
-
-    //     const companyNamn = fileParts[0] || "OKÄNT_BOLAG";
-    //     const isinCode = fileParts[2] || "OKÄND_ISIN"; // Index 2 eftersom ISIN ligger som tredje element
-
-    //     // Spara i databasen genom att loopa igenom AI:ns JSON-svar
-    //     for (const row of jsonData) {
-    //         await saveFinancialData({
-    //             company_namn: companyNamn,
-    //             isin: isinCode,
-    //             ar: Number(row.år),
-    //             enhet: row.enhet || 'msek', // Tar enhet från AI:n, annars default till msek
-                
-    //             // --- RESULTAT ---
-    //             omsattning: row.omsättning !== undefined ? row.omsättning : null,
-    //             rorelseresultat: row.rorelseresultat !== undefined ? row.rorelseresultat : (row.ebit !== undefined ? row.ebit : null),
-    //             arets_resultat: row.årets_resultat !== undefined ? row.årets_resultat : null,
-    //             resultat_per_aktie: row.resultat_per_aktie !== undefined ? row.resultat_per_aktie : null,
-                
-    //             // --- BALANS ---
-    //             summa_tillgangar: row.summa_tillgångar !== undefined ? row.summa_tillgångar : null,
-    //             summa_eget_kapital: row.summa_eget_kapital !== undefined ? row.summa_eget_kapital : null,
-    //             langfristiga_skulder: row.långfristiga_skulder !== undefined ? row.långfristiga_skulder : null,
-    //             kortfristiga_skulder: row.kortfristiga_skulder !== undefined ? row.kortfristiga_skulder : null,
-                
-    //             // --- KASSAFLÖDE ---
-    //             kassaflode_lopande_verksamhet: row.kassaflöde_löpande_verksamhet !== undefined ? row.kassaflöde_löpande_verksamhet : null,
-    //             investeringar_capex: row.investeringar_capex !== undefined ? row.investeringar_capex : null
-    //         });
-    //     }
-
-    //     console.log(`✅ Klart! Data från ${fileName} har sparats i MySQL.`);
-    // } catch (parseError) {
-    //     console.error("❌ Svaret från AI:n kunde inte sparas som JSON. Det var inte i korrekt JSON-format:", parseError);
-    // }
 }
 
-async function runBatchSearch() {
+async function openAndScanZip() {
     const downloadsDir = path.join(process.cwd(), 'downloads');
-    
-    const chatModel = "llama-3.3-70b-versatile";
-
     // Läser alla filer i downloads-mappen
     const files = fs.readdirSync(downloadsDir);
     
     // Filtrera ut så vi bara kör .zip-filer (och hoppar över .pdf eller dolda systemfiler som .DS_Store)
     const zipFiles = files.filter(file => file.endsWith(".zip") && !file.startsWith("."));
-    
-    console.log(`zipFiles: ${zipFiles}`);
 
     console.log(`Hittade ${zipFiles.length} st ZIP-filer att analysera.`);
 
-    // Initiera modellen en gång utanför loopen
-    const model = new ChatGroq({
-        model: chatModel, 
-        temperature: 0, 
-    });
-
-    await processSingleFile(zipFiles[0], model);
-
-    // Det magiska steget: En vanlig for...of-loop med await kör en fil i taget (sekventiellt)
-    // for (const fileName of zipFiles) {
-    //     await processSingleFile(fileName, model);
-
-    //     // 2. RADERA FILEN AUTOMATISKT SÅ ATT MAPPEN ÄR TOM TILL NÄSTA GÅNG
-    //     const filePath = path.join(downloadsDir, fileName);
-    //     try {
-    //         // fs.unlinkSync(filePath);
-    //         // console.log(`🗑️ Raderade ${fileName} från downloads-mappen.`);
-    //     } catch (cleanupError) {
-    //         // console.error(`⚠️ Kunde inte radera filen ${fileName}:`, cleanupError);
-    //     }
-    //     break;
-    // }
-
-  
+ 
+    // Ändra i openAndScanZip om du vill köra alla filer i mappen:
+    for (let i = 0; i < zipFiles.length; i++) {
+        const file = zipFiles[i];
+        await processSingleFile(file);
+        
+        // Pausa i 61 sekunder mellan filer för att hålla oss under Groqs TPM-gräns
+        if (i < zipFiles.length - 1) {
+            console.log(`⏱️ Väntar 61 sekunder för att nollställa Groq Rate Limit (TPM)...`);
+            await sleep(61000);
+        }
+    }
 
     console.log("\n🚀 Allt klart! Samtliga filer har gåtts igenom sekventiellt.");
     process.exit(0);
@@ -295,4 +298,4 @@ async function runBatchSearch() {
 
 
 
-runBatchSearch().catch(console.error);
+openAndScanZip().catch(console.error);
