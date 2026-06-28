@@ -64,31 +64,28 @@ function extractChunk(cleanRapportText: string, keyword: string, keyTags:string[
     }
     return "";
 }
-function extractFinansNumber(yearRapportChunk: string) {
+function extractFinansNumber(yearRapportChunk: string, keyWordsArray: string[]) {
     let cleanChunk = yearRapportChunk.toLowerCase();
-    let keywordOmsattning = "ifrs-full:revenue".toLowerCase(); 
-    let keywordRorelseResultat = `ifrs-full:ProfitLossFromOperatingActivities`.toLowerCase();
-    let keywordArResultat = `ifrs-full:comprehensiveincome`.toLowerCase();
-    let keywordAktiePerResult = `ifrs-full:BasicEarningsLossPerShare`.toLowerCase();
+    
 
-    let keywordsYearRapport = [keywordOmsattning, keywordRorelseResultat, keywordArResultat, keywordAktiePerResult, 'basicearningslosspershare'.toLowerCase(), 'basicearningspershare'.toLowerCase()];
+    //let keywordsYearRapport = [keywordOmsattning, keywordRorelseResultat, keywordArResultat, keywordAktiePerResult, keyWordAktiePerResult2, keyWordAktierPerResult3];
     let arrayPos = [];
 
 
-    for (let i = 0; i < keywordsYearRapport.length; i++) {
+    for (let i = 0; i < keyWordsArray.length; i++) {
         
-        let pos = cleanChunk.indexOf(keywordsYearRapport[i]);
+        let pos = cleanChunk.indexOf(keyWordsArray[i]);
         
 
         while(pos !== -1) {
             
             // 1. Logga den AKTUELLA träffen först
-            console.log(`Träff \nKeyword: ${keywordsYearRapport[i]}\nhittades vid position: ${pos}`);
+            console.log(`Träff \nKeyword: ${keyWordsArray[i]}\nhittades vid position: ${pos}`);
             
             arrayPos.push(pos);
             
             // 2. Sök sedan efter nästa (vilket kan bli -1 och stänga loopen inför nästa varv)
-            pos = cleanChunk.indexOf(keywordsYearRapport[i], pos + 1);
+            pos = cleanChunk.indexOf(keyWordsArray[i], pos + 1);
         }
     }
 
@@ -149,7 +146,25 @@ async function processSingleFile(fileName: string) {
     if(yearRapportChunk) {
         console.log("We got a hit!");
         fs.writeFileSync(path.join(process.cwd(), `year_rapport_test${fileType}`), yearRapportChunk);
-        let posArray = extractFinansNumber(yearRapportChunk);
+
+        // let keywordOmsattning = "ifrs-full:revenue".toLowerCase(); 
+        // let keywordRorelseResultat = `ifrs-full:ProfitLossFromOperatingActivities`.toLowerCase();
+        // let keywordArResultat = `ifrs-full:comprehensiveincome`.toLowerCase();
+        // let keywordAktiePerResult = `ifrs-full:BasicEarningsLossPerShare`.toLowerCase();
+
+        // let keyWordAktiePerResult2 = `basicearningslosspershare`.toLowerCase();
+        // let keyWordAktierPerResult3 = `basicearningspershare`.toLowerCase();
+
+        let keyWordsYearResult: string[] = [
+            "ifrs-full:revenue".toLowerCase(), 
+            `ifrs-full:ProfitLossFromOperatingActivities`.toLowerCase(),
+            `ifrs-full:comprehensiveincome`.toLowerCase(),
+            `ifrs-full:BasicEarningsLossPerShare`.toLowerCase(),
+            `basicearningslosspershare`.toLowerCase(),
+            `basicearningspershare`.toLowerCase()
+        ];
+
+        let posArray = extractFinansNumber(yearRapportChunk, keyWordsYearResult);
 
         console.log(`posArray: ${posArray}`)
         yearRapportChunk = chopMore(posArray[0], posArray[posArray.length - 1], yearRapportChunk);

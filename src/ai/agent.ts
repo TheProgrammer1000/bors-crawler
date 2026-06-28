@@ -13,10 +13,11 @@ dotenv.config();
  "type":"tokens","code":"rate_limit_exceeded"}}
 */
 
-const modelName = `llama-3.1-8b-instant`
+const modelName = "llama3.1"; // eller "qwen2.5-coder"
 
-const model = new ChatGroq({
+const model = new ChatOllama({
     model: modelName,
+    baseUrl: "http://localhost:11434", // Säkerställer att den pratar med din lokala Ollama
     temperature: 0, 
 });
 
